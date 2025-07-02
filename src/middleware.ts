@@ -1,27 +1,33 @@
-import { authMiddleware, redirectToSignIn } from "@clerk/nextjs";
+// src/middleware.ts
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const publicRoutes = ["/", "/login", "/signup"];
+export default clerkMiddleware({
+  // 你可以自定义 publicRoutes 和 afterAuth
+  publicRoutes: ["/", "/login", "/signup"],
+  afterAuth(auth, req) {
+    const { userId, orgId, isPublicRoute } = auth;
 
-export default authMiddleware({
-  publicRoutes,
-  afterAuth({ userId, orgId, isPublicRoute }, req) {
-    // Chưa đăng nhập + không phải public route
     if (!userId && !isPublicRoute) {
-      return redirectToSignIn({ returnBackUrl: req.url });
+      const signInUrl = new URL("/login", req.url);
+      return NextResponse.redirect(signInUrl);
     }
-    // Đã đăng nhập rồi
-    if (userId) {
-      if (!orgId) {
-        return NextResponse.redirect(new URL("/create-workspace", req.url), 308);
-      }
-      if (orgId && isPublicRoute) {
-        return NextResponse.redirect(new URL(`/w/${orgId}/home`, req.url), 308);
-      }
+
+    if (userId && !orgId && req.nextUrl.pathname !== "/create-workspace") {
+      return NextResponse.redirect(new URL("/create-workspace", req.url));
     }
+
+    if (userId && orgId && ["/", "/login", "/signup"].includes(req.nextUrl.pathname)) {
+      return NextResponse.redirect(new URL(`/w/${orgId}/home`, req.url));
+    }
+
+    return NextResponse.next();
   },
 });
 
 export const config = {
-  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };
